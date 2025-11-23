@@ -444,12 +444,24 @@ const Parser = struct {
                         },
                     }
                 } else {
-                    p.consume();
-                    if (p.tok.tag != .eof) try p.err(.{
-                        .tag = .unexpected_token,
-                        .main_location = p.tok.loc,
-                    });
-                    return p.finalize();
+                    switch (p.tok.tag) {
+                        .eof => return p.finalize(),
+                        .struct_kw => {
+                            try p.addChild(.@"struct");
+                            continue :parse .@"struct";
+                        },
+                        .union_kw => {
+                            try p.addChild(.@"union");
+                            continue :parse .@"union";
+                        },
+                        else => {
+                            try p.err(.{
+                                .tag = .unexpected_token,
+                                .main_location = p.tok.loc,
+                            });
+                            return p.finalize();
+                        },
+                    }
                 }
             },
             .root_expr => unreachable,
@@ -553,7 +565,7 @@ const Parser = struct {
                 const m = p.getMeta();
                 container: switch (m.state) {
                     .container_head => {
-                        assert(p.node().tag == .@"struct" or p.node().tag == .@"union");
+                        assert(p.tok.tag == .struct_kw or p.tok.tag == .union_kw);
                         assert(m.last_child_idx == 0);
                         p.consume();
                         switch (p.tok.tag) {
@@ -1205,6 +1217,11 @@ const Parser = struct {
                 .field = field,
                 .depth = 0,
             });
+
+            defer {
+                // assert(dfs_path.entries.len == 1);
+                dfs_path.shrinkRetainingCapacity(0);
+            }
 
             explore: while (unexplored_paths.pop()) |ux| {
                 dfs_path.shrinkRetainingCapacity(ux.depth);
@@ -1924,14 +1941,26 @@ pub fn validate(
                             .identifier, .opt_identifier => {
                                 const scope = scopes_stack.getLast();
                                 const container_name = expr.loc.slice(schema_src);
-                                const container_idx = schema_ast.scopes.get(scope).?.types.get(
-                                    switch (expr.tag) {
-                                        .identifier => container_name,
-                                        .opt_identifier => container_name[1..], // skip '?'
-                                        else => unreachable,
-                                    },
-                                ).?;
-                                const info = containerInfo(schema_ast.nodes, schema_src, container_idx);
+                                const search_name = switch (expr.tag) {
+                                    .identifier => container_name,
+                                    .opt_identifier => container_name[1..], // skip '?'
+                                    else => unreachable,
+                                };
+                                var current_scope = scope;
+                                const container_idx = while (true) {
+                                    break schema_ast.scopes.get(current_scope).?.types.get(
+                                        search_name,
+                                    ) orelse {
+                                        assert(current_scope != 0);
+                                        current_scope = schema_ast.nodes[current_scope].parent_idx;
+                                        continue;
+                                    };
+                                };
+                                const info = containerInfo(
+                                    schema_ast.nodes,
+                                    schema_src,
+                                    container_idx,
+                                );
                                 switch (info.kind) {
                                     .@"struct" => {
                                         try errors.append(gpa, .{
@@ -1989,13 +2018,21 @@ pub fn validate(
                             .identifier, .opt_identifier => {
                                 const scope = scopes_stack.getLast();
                                 const container_name = expr.loc.slice(schema_src);
-                                const container_idx = schema_ast.scopes.get(scope).?.types.get(
-                                    switch (expr.tag) {
-                                        .identifier => container_name,
-                                        .opt_identifier => container_name[1..], // skip '?'
-                                        else => unreachable,
-                                    },
-                                ).?;
+                                const search_name = switch (expr.tag) {
+                                    .identifier => container_name,
+                                    .opt_identifier => container_name[1..], // skip '?'
+                                    else => unreachable,
+                                };
+                                var current_scope = scope;
+                                const container_idx = while (true) {
+                                    break schema_ast.scopes.get(current_scope).?.types.get(
+                                        search_name,
+                                    ) orelse {
+                                        assert(current_scope != 0);
+                                        current_scope = schema_ast.nodes[current_scope].parent_idx;
+                                        continue;
+                                    };
+                                };
                                 const info = containerInfo(schema_ast.nodes, schema_src, container_idx);
                                 switch (info.kind) {
                                     .@"struct" => {
@@ -2103,13 +2140,21 @@ pub fn validate(
                             .identifier, .opt_identifier => {
                                 const scope = scopes_stack.getLast();
                                 const container_name = expr.loc.slice(schema_src);
-                                const container_idx = schema_ast.scopes.get(scope).?.types.get(
-                                    switch (expr.tag) {
-                                        .identifier => container_name,
-                                        .opt_identifier => container_name[1..], // skip '?'
-                                        else => unreachable,
-                                    },
-                                ).?;
+                                const search_name = switch (expr.tag) {
+                                    .identifier => container_name,
+                                    .opt_identifier => container_name[1..], // skip '?'
+                                    else => unreachable,
+                                };
+                                var current_scope = scope;
+                                const container_idx = while (true) {
+                                    break schema_ast.scopes.get(current_scope).?.types.get(
+                                        search_name,
+                                    ) orelse {
+                                        assert(current_scope != 0);
+                                        current_scope = schema_ast.nodes[current_scope].parent_idx;
+                                        continue;
+                                    };
+                                };
                                 const info = containerInfo(schema_ast.nodes, schema_src, container_idx);
                                 switch (info.kind) {
                                     .@"union" => {
@@ -2588,6 +2633,42 @@ test "basics" {
     try std.testing.expectEqual(0, ast.errors.len);
     try std.testing.expectFmt(case, "{f}", .{ast.fmt(case)});
 }
+
+test "basics - nesting" {
+    const case =
+        \\$ = Config
+        \\
+        \\struct Config {
+        \\    level: LogLevel,
+        \\}
+        \\
+        \\union LogLevel {
+        \\    debug,
+        \\    info,
+        \\    warn,
+        \\    error,
+        \\}
+        \\
+    ;
+
+    const ast = try Ast.init(std.testing.allocator, case);
+    defer ast.deinit(std.testing.allocator);
+
+    errdefer {
+        std.debug.print("\n nodes: {any}\n\n", .{ast.nodes});
+        for (ast.errors) |err| {
+            const sel = err.main_location.getSelection(case);
+            std.debug.print("{}:{} {f}\n", .{
+                sel.start.line,
+                sel.start.col,
+                err.tag,
+            });
+        }
+    }
+    try std.testing.expectEqual(0, ast.errors.len);
+    try std.testing.expectFmt(case, "{f}", .{ast.fmt(case)});
+}
+
 test "duplicate field" {
     const case =
         \\$ = Message

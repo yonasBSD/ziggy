@@ -478,7 +478,7 @@ pub const Command = struct {
     // TODO: consider adding --json=file.foo etc
     fn fatalHelp() noreturn {
         std.debug.print(
-            \\Usage: ziggy convert [OPTIONS]
+            \\Usage: ziggy convert [--stdin LANG | --LANG PATH] [OPTIONS]
             \\
             \\     Converts files between JSON / TOML / YAML and Ziggy.
             \\     Converted files will be placed next to their original.
@@ -489,7 +489,7 @@ pub const Command = struct {
             \\Options:
             \\--stdin LANG     Format bytes from stdin, ouptut to stdout, 
             \\                 LANG defines the input file format. Mutually
-            \\                 exclusive with other path-based arguments.
+            \\                 exclusive with --LANG arguments.
             \\
             \\--json PATH      Convert --LANG files from PATH to the desination
             \\--yaml PATH      file format. If PATH is a directory, it will be 

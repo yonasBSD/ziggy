@@ -905,13 +905,20 @@ pub fn render(ast: Ast, src: [:0]const u8, w: *Writer) Writer.Error!void {
                             else => unreachable,
                         }
 
-                        try w.writeAll(switch (node.tag) {
+                        const open_tok = switch (node.tag) {
                             .struct_h, .struct_v, .struct_v_fixup => ".{",
                             .dict_h, .dict_v => "{",
                             else => unreachable,
-                        });
+                        };
+                        try w.writeAll(open_tok);
                         at_newline = false;
-                        try renderComments(&at_newline, indent, node.loc.start + 1, src, w);
+                        try renderComments(
+                            &at_newline,
+                            indent,
+                            @intCast(node.loc.start + open_tok.len),
+                            src,
+                            w,
+                        );
                     },
                     .array_h, .array_v => {
                         array_start = true;
@@ -1054,7 +1061,13 @@ pub fn render(ast: Ast, src: [:0]const u8, w: *Writer) Writer.Error!void {
                 switch (node.tag) {
                     .braceless_struct => {},
                     .struct_h, .dict_h => {
-                        try w.writeAll(" }");
+                        const node_idx = node - ast.nodes.ptr;
+                        if (ast.nodes.len > node_idx + 1 and
+                            ast.nodes[node_idx + 1].parent_idx == node_idx)
+                        {
+                            try w.writeAll(" ");
+                        }
+                        try w.writeAll("}");
                         at_newline = false;
                     },
                     .struct_v, .struct_v_fixup, .dict_v => {

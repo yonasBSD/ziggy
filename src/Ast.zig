@@ -225,8 +225,8 @@ const Parser = struct {
                                 else => unreachable,
                             };
                         }
-                        p.consume();
                         p.cur().loc.end = p.tok.loc.end;
+                        p.consume();
                         p.up();
                         continue :parse p.cur().tag;
                     },
@@ -1057,66 +1057,64 @@ pub fn render(ast: Ast, src: [:0]const u8, w: *Writer) Writer.Error!void {
                     },
                 }
             },
-            .exit => |node| {
-                switch (node.tag) {
-                    .braceless_struct => {},
-                    .struct_h, .dict_h => {
-                        const node_idx = node - ast.nodes.ptr;
-                        if (ast.nodes.len > node_idx + 1 and
-                            ast.nodes[node_idx + 1].parent_idx == node_idx)
-                        {
-                            try w.writeAll(" ");
-                        }
-                        try w.writeAll("}");
+            .exit => |node| switch (node.tag) {
+                .braceless_struct => {},
+                .struct_h, .dict_h => {
+                    const node_idx = node - ast.nodes.ptr;
+                    if (ast.nodes.len > node_idx + 1 and
+                        ast.nodes[node_idx + 1].parent_idx == node_idx)
+                    {
+                        try w.writeAll(" ");
+                    }
+                    try w.writeAll("}");
+                    at_newline = false;
+                },
+                .struct_v, .struct_v_fixup, .dict_v => {
+                    indent -= 1;
+                    if (!at_newline) try w.writeAll("\n");
+                    try w.splatByteAll(' ', indent * 4);
+                    try w.writeAll("}");
+                    at_newline = false;
+                    try renderComments(&at_newline, indent, node.loc.end, src, w);
+                },
+                .array_h => {
+                    try w.writeAll("]");
+                    at_newline = false;
+                    try renderComments(&at_newline, indent, node.loc.end, src, w);
+                },
+                .array_v => {
+                    indent -= 1;
+                    if (!at_newline) try w.writeAll("\n");
+                    try w.splatByteAll(' ', indent * 4);
+                    try w.writeAll("]");
+                    at_newline = false;
+                    try renderComments(&at_newline, indent, node.loc.end, src, w);
+                },
+                .struct_field, .dict_field, .array_element => {
+                    if (src[node.loc.end - 1] == ',' or nodes[node.parent_idx].tag == .struct_v_fixup) {
+                        if (at_newline) try w.splatByteAll(' ', indent * 4);
+                        try w.writeAll(",");
                         at_newline = false;
-                    },
-                    .struct_v, .struct_v_fixup, .dict_v => {
-                        indent -= 1;
-                        if (!at_newline) try w.writeAll("\n");
-                        try w.splatByteAll(' ', indent * 4);
-                        try w.writeAll("}");
-                        at_newline = false;
-                        try renderComments(&at_newline, indent, node.loc.end, src, w);
-                    },
-                    .array_h => {
-                        try w.writeAll("]");
-                        at_newline = false;
-                        try renderComments(&at_newline, indent, node.loc.end, src, w);
-                    },
-                    .array_v => {
-                        indent -= 1;
-                        if (!at_newline) try w.writeAll("\n");
-                        try w.splatByteAll(' ', indent * 4);
-                        try w.writeAll("]");
-                        at_newline = false;
-                        try renderComments(&at_newline, indent, node.loc.end, src, w);
-                    },
-                    .struct_field, .dict_field, .array_element => {
-                        if (src[node.loc.end - 1] == ',' or nodes[node.parent_idx].tag == .struct_v_fixup) {
-                            if (at_newline) try w.splatByteAll(' ', indent * 4);
-                            try w.writeAll(",");
-                            at_newline = false;
-                        }
-                        try renderComments(&at_newline, indent, node.loc.end, src, w);
-                    },
-                    .@"union" => {
-                        try w.writeAll(")");
-                        at_newline = false;
-                        try renderComments(&at_newline, indent, node.loc.end, src, w);
-                    },
-                    .root,
-                    .missing_value,
-                    .bytes_multiline,
-                    .@"enum",
-                    .bytes,
-                    .integer,
-                    .float,
-                    .bool,
-                    .null,
-                    => {
-                        unreachable;
-                    },
-                }
+                    }
+                    try renderComments(&at_newline, indent, node.loc.end, src, w);
+                },
+                .@"union" => {
+                    try w.writeAll(")");
+                    at_newline = false;
+                    try renderComments(&at_newline, indent, node.loc.end, src, w);
+                },
+                .root,
+                .missing_value,
+                .bytes_multiline,
+                .@"enum",
+                .bytes,
+                .integer,
+                .float,
+                .bool,
+                .null,
+                => {
+                    unreachable;
+                },
             },
             .done => {
                 try w.writeAll("\n");

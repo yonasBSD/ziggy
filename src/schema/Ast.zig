@@ -3020,7 +3020,7 @@ test "validate structs" {
             \\.baz = .{ .qix = false },
             \\.bax = true,
             ,
-            \\10:11 schema: missing field 'qux'
+            \\9:10 schema: missing field 'qux'
             \\29:34 schema: expected int found bool
             \\
             ,
@@ -3038,9 +3038,9 @@ test "validate structs" {
             \\.baz = .{ .qqx = .{ .bar = 123 } },
             \\.bax = true,
             ,
-            \\10:11 schema: missing field 'qux'
+            \\9:10 schema: missing field 'qux'
             \\22:44 schema: unknown field
-            \\46:47 schema: missing field 'qix'
+            \\45:46 schema: missing field 'qix'
             \\59:60 schema: missing field 'bax'
             \\
             ,
@@ -3049,7 +3049,7 @@ test "validate structs" {
             \\.bar = .{},
             \\.bar = .{},
             ,
-            \\10:11 schema: missing field 'qux'
+            \\9:10 schema: missing field 'qux'
             \\12:16 duplicate field
             \\22:23 schema: missing field 'baz'
             \\22:23 schema: missing field 'bax'
@@ -3485,7 +3485,7 @@ test "this crashed at some point" {
             \\    .baz = .{},
             \\}
             ,
-            \\14:18 schema: expected {:} found struct
+            \\14:17 schema: expected {:} found struct
             \\
             ,
         },

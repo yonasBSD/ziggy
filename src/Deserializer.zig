@@ -283,12 +283,12 @@ pub fn deserialize(
     opts: Options,
 ) Deserializer.Error!Value(T) {
     var result: Value(T) = undefined;
-    result.arena = .init(gpa);
-    result.value = try deserializeLeaky(T, result.arena.allocator(), src, meta, opts);
+    result.arena_state = .init(gpa);
+    result.value = try deserializeLeaky(T, result.arena_state.allocator(), src, meta, opts);
     return result;
 }
 
-pub fn Value(T: type) T {
+pub fn Value(T: type) type {
     return struct {
         value: T,
         arena_state: std.heap.ArenaAllocator,
@@ -1259,4 +1259,24 @@ test "duplicate field in markdown" {
         \\<stdin>:3:1 duplicate field
         \\
     , "{f}", .{meta.reportErrorsFmt(arena, opts, case, null, error.DuplicateField)});
+}
+
+test "simple deserialization + deserialize" {
+    const case =
+        \\.foo = "bar",
+        \\.bar = true,
+    ;
+
+    const Case = struct {
+        foo: []const u8,
+        bar: bool,
+    };
+
+    var meta: Meta = undefined;
+    const opts: Options = .{};
+    const result = try deserialize(Case, std.testing.allocator, case, &meta, opts);
+    defer result.deinit();
+
+    try std.testing.expectEqualStrings("bar", result.value.foo);
+    try std.testing.expectEqual(true, result.value.bar);
 }

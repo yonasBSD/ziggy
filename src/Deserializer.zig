@@ -354,7 +354,8 @@ pub fn deserializeOne(d: *const Deserializer, T: type, first: Token, top_lvl: bo
             else => return try d.deserializeOne(info.child, first, false),
         },
         .@"enum" => switch (first.tag) {
-            .identifier => return std.meta.stringToEnum(T, first.loc.slice(d.src)),
+            .identifier => return std.meta.stringToEnum(T, first.loc.slice(d.src)[1..]) orelse
+                d.unknownField(first),
             else => return d.unexpected(first),
         },
         .@"union" => |info| {
@@ -552,7 +553,7 @@ pub fn deserializeOne(d: *const Deserializer, T: type, first: Token, top_lvl: bo
         .pointer => |info| switch (info.size) {
             .c, .many => @compileError("cannot deserialize many or c-style pointers"),
             .one => {
-                const ptr: T = d.gpa.create(info.child);
+                const ptr: T = try d.gpa.create(info.child);
                 errdefer d.gpa.destroy(ptr);
 
                 ptr.* = try d.deserializeOne(info.child, first, top_lvl);
@@ -612,9 +613,9 @@ inline fn finalizeStruct(
         if (!seen.isSet(idx)) {
             if (f.default_value_ptr != null) {
                 @field(result, f.name) = f.defaultValue().?;
-                continue;
+            } else {
+                return d.missingField(last, f.name);
             }
-            return d.missingField(last, f.name);
         }
     }
 }
